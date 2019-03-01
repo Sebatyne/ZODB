@@ -676,6 +676,7 @@ def do_recover(options):
         # old ZODB + full partial file may be superior to free disk space
         if os.path.exists(options.output):
           log('Deleting old %s', options.output)
+          os.unlink(options.output)
         log('Recovering file to %s', options.output)
         temporary_output_file = options.output + '.part'
         outfp = open(temporary_output_file, 'wb')
