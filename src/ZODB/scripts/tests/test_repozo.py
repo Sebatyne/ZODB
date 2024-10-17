@@ -848,9 +848,7 @@ class Test_do_incremental_backup(OptionsTestBase, unittest.TestCase):
         self.assertEqual(index.minKey(), pZero)
         self.assertEqual(index.maxKey(), db.maxkey)
 
-
-class Test_do_recover(OptionsTestBase, unittest.TestCase):
-
+class Mixin_do_recover:
     def _callFUT(self, options):
         from ZODB.scripts.repozo import do_recover
         return do_recover(options)
@@ -993,6 +991,58 @@ class Test_do_recover(OptionsTestBase, unittest.TestCase):
             '/backup/2010-05-14-04-05-06.deltafs 3 8 f50881ced34c7d9e6bce100bf33dec60\n')  # noqa: E501 line too long
         self.assertRaises(VerificationFail, self._callFUT, options)
         self.assertTrue(os.path.exists(output + '.part'))
+
+
+class Test_do_full_recover(
+        Mixin_do_recover,
+        OptionsTestBase,
+        unittest.TestCase
+):
+    def _makeOptions(self, **kw):
+        options = super()._makeOptions(**kw)
+        options.full = True
+        return options
+
+
+class Test_do_incremental_recover(
+        Mixin_do_recover,
+        OptionsTestBase,
+        unittest.TestCase
+):
+    def _makeOptions(self, **kw):
+        options = super()._makeOptions(**kw)
+        options.full = False
+        return options
+
+    def test_w_incr_recover_from_incr_backup(self):
+        import tempfile
+        dd = self._data_directory = tempfile.mkdtemp(prefix='zodb-test-')
+        output = os.path.join(dd, 'Data.fs')
+        options = self._makeOptions(date='2010-05-15-13-30-57',
+                                    output=output,
+                                    withverify=False)
+        self._makeFile(2, 3, 4, '.fs', 'AAA')
+        self._makeFile(4, 5, 6, '.deltafs', 'BBB')
+        self._makeFile(
+            2, 3, 4, '.dat',
+            '/backup/2010-05-14-02-03-04.fs 0 3 e1faffb3e614e6c2fba74296962386b7\n'  # noqa: E501 line too long
+            '/backup/2010-05-14-04-05-06.deltafs 3 6 2bb225f0ba9a58930757a868ed57d9a3\n')  # noqa: E501 line too long
+        self._callFUT(options)
+        self.assertEqual(_read_file(output), b'AAABBB')
+        self.assertFalse(os.path.exists(output + '.part'))
+
+        # Create 2 more .deltafs, to prove the code knows where to pick up
+        self._makeFile(6, 7, 8, '.deltafs', 'CCC')
+        self._makeFile(8, 9, 10, '.deltafs', 'DDD')
+        self._makeFile(
+            2, 3, 4, '.dat',
+            '/backup/2010-05-14-02-03-04.fs 0 3 e1faffb3e614e6c2fba74296962386b7\n'  # noqa: E501 line too long
+            '/backup/2010-05-14-04-05-06.deltafs 3 6 2bb225f0ba9a58930757a868ed57d9a3\n'  # noqa: E501 line too long
+            '/backup/2010-05-14-06-07-08.deltafs 6 9 defb99e69a9f1f6e06f15006b1f166ae\n'  # noqa: E501 line too long
+            '/backup/2010-05-14-08-09-10.deltafs 6 9 45054f47ac3305a2a33e9bcceadff712\n')  # noqa: E501 line too long
+        self._callFUT(options)
+        self.assertEqual(_read_file(output), b'AAABBBCCCDDD')
+        self.assertFalse(os.path.exists(output + '.part'))
 
 
 class Test_do_verify(OptionsTestBase, unittest.TestCase):
@@ -1281,7 +1331,8 @@ def test_suite():
         loadTestsFromTestCase(Test_do_full_backup),
         loadTestsFromTestCase(Test_do_incremental_backup),
         # unittest.makeSuite(Test_do_backup),  #TODO
-        loadTestsFromTestCase(Test_do_recover),
+        loadTestsFromTestCase(Test_do_full_recover),
+        loadTestsFromTestCase(Test_do_incremental_recover),
         loadTestsFromTestCase(Test_do_verify),
         # N.B.:  this test take forever to run (~40sec on a fast laptop),
         # *and* it is non-deterministic.
