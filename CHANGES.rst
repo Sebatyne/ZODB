@@ -5,6 +5,13 @@
 6.0.1 (unreleased)
 ==================
 
+- repozo: Change restoration to be incremental by default, unless ``--full`` is
+  provided.
+  Repozo now tries to append the new incremental deltafs on previously restored
+  filestorage, if the file's sizes and the checksum of the last restored increment
+  match, otherwise it will fallback to a full recover.
+  For details see `#403 <https://github.com/zopefoundation/ZODB/pull/403>`_.
+
 
 6.0 (2024-03-20)
 ================
